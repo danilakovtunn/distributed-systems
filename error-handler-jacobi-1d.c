@@ -1,7 +1,7 @@
-
 /* Include benchmark-specific header. */
 #include "jacobi-1d.h"
 #include <mpi.h>
+#include <mpi-ext.h>
 #include <signal.h>
 double bench_t_start, bench_t_end;
 int size, rank;
@@ -39,6 +39,7 @@ void bench_timer_print() {
 static
 void init_array (int n, double *A, double *B) {
     int i;
+
     for (i = 0; i < n; i++) {
         A[i] = ((double) i + 2) / n;
         B[i] = ((double) i + 3) / n;
@@ -49,6 +50,7 @@ void init_array (int n, double *A, double *B) {
 static
 void print_array(int n, double *A) {
     int i;
+
     fprintf(stderr, "==BEGIN DUMP_ARRAYS==\n");
     fprintf(stderr, "begin dump: %s", "A");
     for (i = 0; i < n; i++) {
@@ -133,7 +135,7 @@ void kernel_jacobi_1d(int tsteps, int n) {
         if (iend >= n - 3) {
             iend = n - 3;
             right_rank = size - 1;
-            MPI_Isend(&rank, 1, MPI_INT, size - 1, 0, comm, &req);
+            MPI_Send(&rank, 1, MPI_INT, size - 1, 0, comm);
         }
         // У нити size - 1 корректируем ibeg & iend и получаем номер последней нормальной нити
         if (rank == size - 1) {
@@ -146,27 +148,48 @@ void kernel_jacobi_1d(int tsteps, int n) {
                 left_rank--;
         }
 
-        if (ibeg == -1) {
+        int err = MPI_Barrier(comm);
+        if (err != MPI_SUCCESS) {
+            t = t - 2;
             MPIX_Comm_shrink(comm, &comm);
             MPI_Comm_rank(comm, &rank);
+
+            char fname[50];
+            sprintf(fname, "matrixes/A%d.txt\0", rank);
+            FILE* fdA = fopen(fname, "r");
+            for (int i = 0; i < n; ++i) {
+                fscanf(fdA, "%lf ", &A[i]);
+            }
+            fclose(fdA);
+
+            sprintf(fname, "matrixes/B%d.txt\0", rank);
+            FILE* fdB = fopen(fname, "r");
+            for (int i = 0; i < n; ++i) {
+                fscanf(fdB, "%lf ", &B[i]);
+            }
+            fclose(fdB);
+
             continue;
         }
 
         char fname[50];
         sprintf(fname, "matrixes/A%d.txt\0", rank);
-        FILE* fdA = fopen(fname, "r");
+        FILE* fdA = fopen(fname, "w");
         for (int i = 0; i < n; ++i) {
-            fscanf(fdA, "%lf ", &A[i]);
+            fprintf(fdA, "%lf ", A[i]);
         }
         fclose(fdA);
 
         sprintf(fname, "matrixes/B%d.txt\0", rank);
-        FILE* fdB = fopen(fname, "r");
+        FILE* fdB = fopen(fname, "w");
         for (int i = 0; i < n; ++i) {
-            fscanf(fdB, "%lf ", &B[i]);
+            fprintf(fdB, "%lf ", B[i]);
         }
         fclose(fdB);
 
+        if (ibeg == -1) {
+            continue;
+        }
 
         if (cnt == 1 && rank == 1) {
             raise(SIGKILL);
@@ -227,24 +250,6 @@ void kernel_jacobi_1d(int tsteps, int n) {
             MPI_Recv(&A[iend + 1], 1, MPI_DOUBLE, rank + 1, 0, comm, &status);
             MPI_Recv(&A[ibeg - 1], 1, MPI_DOUBLE, rank - 1, 0, comm, &status);
         }
-
-
-        sprintf(fname, "matrixes/A%d.txt\0", rank);
-        fdA = fopen(fname, "w");
-        for (int i = 0; i < n; ++i) {
-            fprintf(fdA, "%lf ", A[i]);
-        }
-        fclose(fdA);
-
-        sprintf(fname, "matrixes/B%d.txt\0", rank);
-        fdB = fopen(fname, "w");
-        for (int i = 0; i < n; ++i) {
-            fprintf(fdB, "%lf ", B[i]);
-        }
-        fclose(fdB);
-
-        MPIX_Comm_shrink(comm, &comm);
-        MPI_Comm_rank(comm, &rank);
     }
 
     // Собираем новые данные на нити size - 1
@@ -328,4 +333,3 @@ int main(int argc, char *argv[]) {
     MPI_Finalize();
     return 0;
 }
-
