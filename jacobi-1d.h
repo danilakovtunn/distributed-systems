@@ -1,6 +1,6 @@
 #ifndef _JACOBI_1D_H
 
-#define _JACOBI_1D_H 
+#define _JACOBI_1D_H
 
 # if !defined(MINI_DATASET) && !defined(SMALL_DATASET) && !defined(MEDIUM_DATASET) && !defined(LARGE_DATASET) && !defined(EXTRALARGE_DATASET)
 
@@ -47,3 +47,4 @@
 #include <sys/time.h>
 
 #endif
+
